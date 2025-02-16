@@ -5,12 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/deatil/go-cryptobin/cryptobin/crypto"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/deatil/go-cryptobin/cryptobin/crypto"
 )
 
 type Attribute struct {
@@ -20,6 +21,7 @@ type Attribute struct {
 	AndroidVer string
 	ColorOSVer string
 	ProxyStr   string
+	CarrierID  string
 }
 
 func (attr *Attribute) postProcessing() {
@@ -43,15 +45,25 @@ func (attr *Attribute) postProcessing() {
 }
 
 type UpdateResponseCipher struct {
+	Parent     string `json:"parent"`
 	Components []struct {
 		ComponentId      string `json:"componentId"`
 		ComponentName    string `json:"componentName"`
 		ComponentVersion string `json:"componentVersion"`
 
 		ComponentPackets struct {
-			Size      string `json:"size"`
+			Size    string `json:"size"`
+			VabInfo struct {
+				Data struct {
+					OtaStreamingProperty string   `json:"otaStreamingProperty"`
+					VabPackageHash       string   `json:"vab_package_hash"`
+					ExtraParams          string   `json:"extra_params"`
+					Header               []string `json:"header"`
+				} `json:"data"`
+			} `json:"vabInfo"`
 			ManualUrl string `json:"manualUrl"`
 			Id        string `json:"id"`
+			Type      string `json:"type"`
 			Url       string `json:"url"`
 			Md5       string `json:"md5"`
 		} `json:"componentPackets"`
@@ -59,22 +71,66 @@ type UpdateResponseCipher struct {
 
 	SecurityPatch   string `json:"securityPatch"`
 	RealVersionName string `json:"realVersionName"`
+	OtaVersion      string `json:"otaVersion"`
+	IsNvDescription bool   `json:"isNvDescription"`
 
 	Description struct {
-		PanelUrl   string `json:"panelUrl"`
-		Url        string `json:"url"`
-		FirstTitle string `json:"firstTitle"`
+		Opex       struct{} `json:"opex"`
+		Share      string   `json:"share"`
+		PanelUrl   string   `json:"panelUrl"`
+		Url        string   `json:"url"`
+		FirstTitle string   `json:"firstTitle"`
 	} `json:"description"`
 
-	RealAndroidVersion  string `json:"realAndroidVersion"`
-	RealOsVersion       string `json:"realOsVersion"`
+	VersionTypeId string `json:"versionTypeId"`
+	VersionName   string `json:"versionName"`
+	Rid           string `json:"rid"`
+	ReminderValue struct {
+		Download struct {
+			Notice  []int  `json:"notice"`
+			Pop     []int  `json:"pop"`
+			Version string `json:"version"`
+		} `json:"download"`
+		Upgrade struct {
+			Notice  []int  `json:"notice"`
+			Pop     []int  `json:"pop"`
+			Version string `json:"version"`
+		} `json:"upgrade"`
+	} `json:"reminderValue"`
+	IsRecruit             bool     `json:"isRecruit"`
+	RealAndroidVersion    string   `json:"realAndroidVersion"`
+	OpexInfo              []string `json:"opexInfo"`
+	IsSecret              bool     `json:"isSecret"`
+	RealOsVersion         string   `json:"realOsVersion"`
+	OsVersion             string   `json:"osVersion"`
+	PublishedTime         int64    `json:"publishedTime"`
+	ComponentAssembleType bool     `json:"componentAssembleType"`
+	IsV5GkaVersion        int      `json:"isV5GkaVersion"`
+	GooglePatchInfo       string   `json:"googlePatchInfo"`
+	Id                    string   `json:"id"`
+	ColorOSVersion        string   `json:"colorOSVersion"`
+	IsConfidential        int      `json:"isConfidential"`
+	BetaTasteInteract     bool     `json:"betaTasteInteract"`
+	ParamFlag             int      `json:"paramFlag"`
+	ReminderType          int      `json:"reminderType"`
+	NoticeType            int      `json:"noticeType"`
+	Decentralize          struct {
+		StrategyVersion string `json:"strategyVersion"`
+		Round           int    `json:"round"`
+		Offset          int    `json:"offset"`
+	} `json:"decentralize"`
+	VersionCode         int    `json:"versionCode"`
+	SilenceUpdate       int    `json:"silenceUpdate"`
 	SecurityPatchVendor string `json:"securityPatchVendor"`
+	GkaReq              int    `json:"gkaReq"`
 	RealOtaVersion      string `json:"realOtaVersion"`
+	AndroidVersion      string `json:"androidVersion"`
+	NightUpdateLimit    string `json:"nightUpdateLimit"`
 	VersionTypeH5       string `json:"versionTypeH5"`
+	Aid                 string `json:"aid"`
+	NvId16              string `json:"nvId16"`
 	Status              string `json:"status"`
 }
-
-// func QueryUpdater(otaVer, androidVer, colorOsVer, zone string, mode int, transport http.Transport) (*UpdateResponseCipher, error) {
 
 func QueryUpdater(attr *Attribute) (*UpdateResponseCipher, error) {
 	rawBytes, err := QueryUpdaterRawBytes(attr)
@@ -121,6 +177,10 @@ func QueryUpdaterRawBytes(attr *Attribute) ([]byte, error) {
 	headers.SetHashedDeviceId(deviceId)
 	cipher := NewUpdateRequestCipher(attr.Mode, deviceId)
 
+	if attr.CarrierID != "" {
+		c.CarrierID = attr.CarrierID
+	}
+
 	reqHeaders, err := headers.CreateRequestHeader(c)
 	if err != nil {
 		return nil, err
@@ -162,7 +222,7 @@ func QueryUpdaterRawBytes(attr *Attribute) ([]byte, error) {
 
 func decryptUpdateResponse(r *ResponseResult, key []byte) ([]byte, error) {
 	if r.ResponseCode != 200 {
-		return nil, fmt.Errorf("respnse code: %d, message: %s", r.ResponseCode, r.ErrMsg)
+		return nil, fmt.Errorf("response code: %d, message: %s", r.ResponseCode, r.ErrMsg)
 	}
 
 	var m map[string]interface{}
